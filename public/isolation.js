@@ -1,189 +1,140 @@
-import { disableExtensions, enableExtensions, allExtensionInfo, updateIconState} from "./utils/functions.js";
+import { disableExtensions, enableExtensions, allExtensionInfo, updateIconState } from "./utils/functions.js";
 
-// Type definitions.
-/** 
- * @typedef {object} TExtension
- * @property {string} description
- * @property {boolean} enabled
- * @property {string} homepageUrl
- * @property {string[]} hostPermissions
- * @property {object[]} icons
- * @property {number} icons.size
- * @property {string} icons.url
- * @property {string} id
- * @property {string} installType
- * @property {boolean} isApp
- * @property {boolean} mayDisable
- * @property {string} name
- * @property {boolean} offlineEnabled
- * @property {string} optionsUrl
- * @property {string[]} permissions
- * @property {string} shortName
- * @property {string} type
- * @property {string} updateUrl
- * @property {string} version
+/**
+ * Type definitions
+ * @typedef {Object} TExtension
+ * @property {string} description - The description of the extension.
+ * @property {boolean} enabled - Indicates if the extension is currently enabled.
+ * @property {string} homepageUrl - The homepage URL of the extension.
+ * @property {string[]} hostPermissions - The host permissions of the extension.
+ * @property {Object[]} icons - The icons of the extension.
+ * @property {number} icons.size - The size of the icon.
+ * @property {string} icons.url - The URL of the icon.
+ * @property {string} id - The ID of the extension.
+ * @property {string} installType - The install type of the extension.
+ * @property {boolean} isApp - Indicates if the extension is an app.
+ * @property {boolean} mayDisable - Indicates if the extension can be disabled.
+ * @property {string} name - The name of the extension.
+ * @property {boolean} offlineEnabled - Indicates if the extension is enabled offline.
+ * @property {string} optionsUrl - The URL to the extension's options page.
+ * @property {string[]} permissions - The permissions of the extension.
+ * @property {string} shortName - The short name of the extension.
+ * @property {string} type - The type of the extension.
+ * @property {string} updateUrl - The URL for the extension's update manifest.
+ * @property {string} version - The version of the extension.
  */
 
+document.addEventListener('DOMContentLoaded', async () => {
+    const isolationBtn = document.getElementById("isolation-btn");
+    const customDialog = document.getElementById("custom-dialog");
+    const dialogBox = document.getElementById("dialog-box");
+    const dialogMessage = document.getElementById("dialog-message");
+    const confirmButtons = document.getElementById("confirm-buttons");
+    const confirmYes = document.getElementById("confirm-yes");
+    const confirmNo = document.getElementById("confirm-no");
 
-/**
-   * 
-   * @param {TExtension[]}
-   * @param {number} step 
-   * @returns {TExtension}
-*/
+    // Initialize and prepare the state of extensions
+    async function initialize() {
+        const extensions = (await chrome.management.getAll()).filter(ext => ext.id !== chrome.runtime.id && ext.type === "extension");
+        const { enabledExts, disabledExts } = allExtensionInfo(extensions);
+        await chrome.storage.local.set({
+            lastEnabledExts: enabledExts.map(ext => ext.id),
+            lastDisabledExts: disabledExts.map(ext => ext.id)
+        });
+    }
 
-async function isolationMode(extensionList, step=0) {
-  console.log(`Isolation Mode running in step ${step}`)
-  // Completed isolation mode
-  if (extensionList.length == 1) {
-    return extensionList[0];
-  }
+    await initialize();
 
-  const halfIndex = Math.floor(extensionList.length / 2);
-  // Split the extensions into two halves.
-  const half1 = extensionList.slice(0, halfIndex);
-  const half2 = extensionList.slice(halfIndex);
-  
-  // Retreiving the bigger and smaller sizes for less steps to occur during isolation.
-  const [biggerHalf, smallerHalf] = [half1, half2].sort((a, b) => b.length - a.length)
-  console.log("---------------- All Extensions in this step. ---------------")
-  console.log(getExtensionNames(extensionList))
-  console.log("----------------- BIGGER HALF -------------------")
-  console.log(getExtensionNames(biggerHalf))
-  console.log("----------------- SMALLER HALF -------------------")
-  console.log(getExtensionNames(smallerHalf))
-  
-  
-  // Isolate and enable only the biggerHalf of the extension list.
-  enableExtensions(biggerHalf)
-  disableExtensions(smallerHalf)
-  const response = await getUserFeedback(biggerHalf)
-  // Disable the previously enabled extensions to prepare for the next step.
-  disableExtensions(biggerHalf)
-  // if response is true problematic extension is in biggerHalf
-  if (response) {
-    return isolationMode(biggerHalf, step+1)
-  }
-  else {
-    return isolationMode(smallerHalf, step+1)
-  }
-}
+    isolationBtn.addEventListener("click", async () => {
+        isolationBtn.style.display = "none";
+        confirmButtons.style.display = "flex";
+        dialogBox.style.display = "block";
+        confirmYes.style.display = "block";
+        confirmNo.style.display = "block";
 
+        console.log("Starting isolation Mode.");
+        const extensions = (await chrome.management.getAll()).filter(ext => ext.id !== chrome.runtime.id && ext.type === "extension");
+        const result = await isolationMode(extensions);
 
-/**
- * Returns boolean based on whether one of the extensions in are problematic for the user
- * @param {TExtension[]} firstHalf
- * @returns {boolean}
-*/
+        console.log("Isolation Mode complete.");
+        console.log("Found problematic extension:", result.name);
 
-async function getUserFeedback(firstHalf) {
-  if (firstHalf.length === 1) {
-    dialogMessage.textContent = `This extension has been enabled.\n Are you still having issues?`;
-  } else {
-    dialogMessage.textContent = `These extensions have been enabled.\nAre you still having issues?`;
-  }
+        // Display the result to the user
+        displayResult(result);
 
-  // Create a container div to hold the extension information
-  const extensionContainer = document.createElement('div');
-  extensionContainer.classList.add('extension-container');
+        // Restore the extensions to their original state
+        const { lastEnabledExts, lastDisabledExts } = await chrome.storage.local.get(["lastEnabledExts", "lastDisabledExts"]);
+        enableExtensions(extensions.filter(ext => lastEnabledExts.includes(ext.id)));
+        disableExtensions(extensions.filter(ext => lastDisabledExts.includes(ext.id)));
 
-  // Add individual divs for each extension with name and icon
-  firstHalf.forEach(extension => {
-    const extensionDiv = document.createElement('div');
-
-    // Create an img tag for the extension icon
-    extensionDiv.style.display = "flex"
-    extensionDiv.style.gap = "0.2em"
-    const iconImg = document.createElement('img');
-    iconImg.src = extension?.icons[0]?.url || "./images/chrome-32.png";
-    iconImg.alt = 'Extension Icon';
-
-    iconImg.style.width = "25px";
-    iconImg.style.height = "25px"
-
-
-    // Create a div to display the extension name
-    const nameDiv = document.createElement('div');
-    nameDiv.textContent = extension.name;
-
-    // Append the img and name divs to the extensionDiv
-    extensionDiv.appendChild(iconImg);
-    extensionDiv.appendChild(nameDiv);
-
-    // Append the extensionDiv to the extensionContainer
-    extensionContainer.appendChild(extensionDiv);
-  });
-
-  // Append the extensionContainer to the dialogMessage
-  dialogMessage.appendChild(extensionContainer);
-
-  return new Promise((resolve) => {
-    customDialog.style.display = "block";
-
-    confirmYes.addEventListener("click", () => {
-      customDialog.style.display = "none";
-      resolve(true);
+        isolationBtn.style.display = "block";
+        confirmButtons.style.display = "none";
     });
 
-    confirmNo.addEventListener("click", () => {
-      customDialog.style.display = "none";
-      resolve(false);
-    });
-  });
-}
+    async function isolationMode(extensionList, step = 0) {
+        console.log(`Isolation Mode running in step ${step}`);
+        if (extensionList.length <= 1) {
+            return extensionList[0];
+        }
 
+        const halfIndex = Math.floor(extensionList.length / 2);
+        const half1 = extensionList.slice(0, halfIndex);
+        const half2 = extensionList.slice(halfIndex);
 
-function getExtensionNames(extList) {
-  return extList.map(ext => ext.name)
-}
+        enableExtensions(half1);
+        disableExtensions(half2);
 
-const isolationBtn = document.getElementById("isolation-btn")
-const customDialog = document.getElementById("custom-dialog");
-const dialogBox = document.getElementById("dialog-box");
-const dialogMessage = document.getElementById("dialog-message");
-const confirmButtons = document.getElementById("confirm-buttons")
-const confirmYes = document.getElementById("confirm-yes")
-const confirmNo = document.getElementById("confirm-no")
+        const response = await getUserFeedback(half1);
+        disableExtensions(half1); // Prepare for the next step
 
-// Get all extensions excluding itself.
-const extensions = (await chrome.management.getAll()).filter(ext => ext.id !== chrome.runtime.id)
-// Get currently enabled and disabled extensions revert to original state (excluding itself).
-const {enabledExts, disabledExts} = allExtensionInfo(extensions)
-// Set extensions state to local storage in the case the window is closed
-await chrome.storage.local.set({lastEnabledExts: enabledExts, lastDisabledExts: disabledExts})
+        const nextHalf = response ? half1 : half2;
+        return isolationMode(nextHalf, step + 1);
+    }
 
-isolationBtn.addEventListener("click", async () => {
-    confirmYes.textContent = "Yes"
-    isolationBtn.style.display = "none"
-    confirmButtons.style.display = "flex"
-    dialogBox.style.display = "block"
-    confirmYes.style.display = "block"
-    confirmNo.style.display = "block"
+    async function getUserFeedback(firstHalf) {
+        dialogMessage.innerHTML = firstHalf.length === 1 ? "This extension has been enabled. Are you still having issues?" : "These extensions have been enabled. Are you still having issues?";
+        dialogMessage.appendChild(createExtensionList(firstHalf));
 
-    console.log("Starting isolation Mode.")
-    const result = await isolationMode(extensions)
+        return new Promise((resolve) => {
+            customDialog.style.display = "block";
+            confirmYes.onclick = () => {
+                customDialog.style.display = "none";
+                resolve(true);
+            };
+            confirmNo.onclick = () => {
+                customDialog.style.display = "none";
+                resolve(false);
+            };
+        });
+    }
 
-    console.log("Isolation Mode complete.")
-    console.log("Found problematic extension", result.name)
+    function createExtensionList(extensions) {
+        const container = document.createElement('div');
+        container.classList.add('extension-container');
+        extensions.forEach(extension => {
+            const div = document.createElement('div');
+            div.style.display = "flex";
+            div.style.gap = "0.2em";
 
-    customDialog.style.display = "block";
-    confirmButtons.style.display = "flex"
+            const iconImg = document.createElement('img');
+            iconImg.src = extension.icons[0]?.url || "./images/chrome-32.png";
+            iconImg.alt = 'Extension Icon';
+            iconImg.style.width = "25px";
+            iconImg.style.height = "25px";
 
-    dialogMessage.innerHTML = `
-    <div>
-        <span>
-          <p>The extension possibly causing issues is: 
-          <img src=${result?.icons[0]?.url || "./images/chrome-32.png"} width="25" height="25">
-          <strong>${result.name}</strong>
-          </p>
-        </span>
-    </div>`
+            const nameDiv = document.createElement('div');
+            nameDiv.textContent = extension.name;
 
-    isolationBtn.style.display = "block"
-    
-    confirmYes.style.display = "none"
-    confirmNo.style.display = "none"
+            div.appendChild(iconImg);
+            div.appendChild(nameDiv);
+            container.appendChild(div);
+        });
+        dialogMessage.appendChild(container);
+    }
 
-    enableExtensions(enabledExts)
-    disableExtensions(disabledExts)
-})
+    function displayResult(extension) {
+        dialogMessage.innerHTML = `The extension possibly causing issues is: <strong>${extension.name}</strong>`;
+        customDialog.style.display = "block";
+        confirmButtons.style.display = "none"; // Hide confirm buttons after displaying the result
+    }
+});
