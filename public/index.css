@@ -67,11 +67,11 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   padding: 10px;
-  background-color: #fff; /* Assuming you want a contrasting background for items */
+  background-color: #fff; /* contrasting background for items */
   border-radius: 5px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Adding some shadow for depth */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* some shadow for depth */
 }
 
 .item p {
-  margin: 0; /* Adjust as needed */
+  margin: 0;
 }
