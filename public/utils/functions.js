@@ -49,12 +49,54 @@ const enableExtensions = (extensionList) => {
   for (const ext of extensionList) {
     chrome.management.setEnabled(ext.id, true);
   }
-};
+}
 
 /**
- * Get enabled and disabled extensions from an array of extension objects.
- * @param {TExtension[]} extensionList
- * @returns {{enabledExts: TExtension[], disabledExts: TExtension[]}} An object with arrays of enabled and disabled extensions.
+ * 
+ * @param
+  * @returns {Object} returns an object with enabledExtensions and disabledExtensions
+ */
+
+const getExtensionStateById = (extensionList) => {
+  
+  const enabledExts = []
+  const disabledExts = []
+  for (const ext of extensionList) {
+
+    if (ext.type === "extension") {
+        const { enabled, id} = ext
+
+        if (enabled) {
+            enabledExts.push({id})
+        }
+
+        else {
+            disabledExts.push({id})
+        }
+    }
+  }
+  return { enabledExts, disabledExts }
+}
+
+
+/**
+* Updates to the relevant icons based on the applicationState
+*/
+const updateIconState = () => {
+
+  chrome.storage.sync.get(["isDisablingOtherExts"], async ({isDisablingOtherExts}) => {
+      if (isDisablingOtherExts) {
+          await chrome.action.setIcon({path: {"16": "../public/images/appOn_16.png"}})
+      }
+      else {
+          await chrome.action.setIcon({path: {"16": "../public/images/appOff_16.png"}})
+      }
+  })
+}
+
+/**
+ * 
+ * Debounce a function with certain amount of MS
  */
 const allExtensionInfo = (extensionList) => {
   const enabledExts = [];
@@ -114,10 +156,6 @@ function debounce(func, delay) {
   };
 }
 
-export {
-  disableExtensions,
-  enableExtensions,
-  allExtensionInfo,
-  updateIconState,
-  debounce,
-};
+
+
+export {disableExtensions, enableExtensions, updateIconState, debounce, getExtensionStateById }

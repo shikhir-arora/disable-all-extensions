@@ -1,9 +1,4 @@
-import {
-  disableExtensions,
-  enableExtensions,
-  allExtensionInfo,
-  updateIconState,
-} from "./utils/functions.js";
+import { disableExtensions, enableExtensions, updateIconState, getExtensionStateById} from "./utils/functions.js";
 
 /**
  * Type definitions
@@ -149,8 +144,42 @@ document.addEventListener("DOMContentLoaded", async () => {
       div.appendChild(nameDiv);
       container.appendChild(div);
     });
-    return container;
-  }
+  });
+}
+
+
+function getExtensionNames(extList) {
+  return extList.map(ext => ext.name)
+}
+
+const isolationBtn = document.getElementById("isolation-btn")
+const customDialog = document.getElementById("custom-dialog");
+const dialogBox = document.getElementById("dialog-box");
+const dialogMessage = document.getElementById("dialog-message");
+const confirmButtons = document.getElementById("confirm-buttons")
+const confirmYes = document.getElementById("confirm-yes")
+const confirmNo = document.getElementById("confirm-no")
+
+// Get all extensions excluding itself.
+const extensions = (await chrome.management.getAll()).filter(ext => ext.id !== chrome.runtime.id)
+// Get currently enabled and disabled extensions revert to original state (excluding itself).
+const {enabledExts, disabledExts} = getExtensionStateById(extensions)
+// Set extensions state to local storage in the case the window is closed
+await chrome.storage.sync.set({lastEnabledExts: enabledExts, lastDisabledExts: disabledExts})
+
+isolationBtn.addEventListener("click", async () => {
+    confirmYes.textContent = "Yes"
+    isolationBtn.style.display = "none"
+    confirmButtons.style.display = "flex"
+    dialogBox.style.display = "block"
+    confirmYes.style.display = "block"
+    confirmNo.style.display = "block"
+
+    console.log("Starting isolation Mode.")
+    const result = await isolationMode(extensions)
+
+    console.log("Isolation Mode complete.")
+    console.log("Found problematic extension", result.name)
 
   function displayResult(extension) {
     dialogMessage.innerHTML = `The extension possibly causing issues is: <strong>${extension.name}</strong>`;
